@@ -1,9 +1,11 @@
+from os import sep
 from typing import List, Tuple
 from bs4 import BeautifulSoup
 import requests
 import re
 import time
 import os.path
+import spacy
 
 
 def error_page(soup) -> bool:
@@ -50,7 +52,6 @@ def split_article_in_sentences(article: str) -> List[str]:
     sentences = article.split('.')
     sentences = [sentence for sentence in sentences if sentence]
     sentences = [sentence.strip() for sentence in sentences]
-    sentences = [sentence + '.' for sentence in sentences]
     return sentences
 
 
@@ -102,6 +103,62 @@ def fetch_last_index_file() -> int:
         return 0
 
 
+def sentence_structure(sentence_deps: List[str]) -> bool:
+    for word_dep in sentence_deps:
+        if word_dep == 'nsubj':
+            return True
+
+    counter: int = 0
+    for word_dep in sentence_deps:
+        if word_dep == 'det' or word_dep == 'appos':
+            counter += 1
+            break
+
+    for word_dep in sentence_deps:
+        if word_dep == 'case':
+            counter += 1
+            break
+
+    for word_dep in sentence_deps:
+        if word_dep == 'nmod' or word_dep == 'amod':
+            counter += 1
+            break
+
+    return True if counter == 3 else False
+
+
+def sentences_cleaner(nlp, sentences: List[str]) -> List[str]:
+    sentences_sanitized: List[str] = []
+    for sentence in sentences:
+        # vérifie si la phrase a une structure syntaxique correcte
+        doc = nlp(sentence)
+        sentence_deps: List[str] = [token.dep_ for token in doc]
+
+        if not sentence_structure(sentence_deps):
+            continue
+
+        if sentence[0] == '—':
+            sentence = sentence.replace('—', '')
+
+        if sentence[0] == ')':
+            sentence = sentence.replace(')', '')
+
+        sentence = sentence.replace('[', '')
+        sentence = sentence.replace(']', '')
+        sentence = sentence.replace('…', '')
+        sentence = sentence.replace('\xa0', '')
+        sentence = sentence.replace('"', '')
+        sentence = sentence.replace('“', '')
+        sentence = sentence.replace('”', '')
+        sentence = sentence.replace('‘', '')
+        sentence = sentence.replace('’', '')
+
+        sentence = sentence.strip()
+        sentences_sanitized.append(sentence)
+
+    return sentences_sanitized
+
+
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -119,6 +176,7 @@ START_AT: int = fetch_last_article_nb_checked()
 
 
 def main():
+    nlp = spacy.load('ca')
     idx_filename: int = fetch_last_index_file()
     total_words: int = 0
     total_sentences: int = 0
